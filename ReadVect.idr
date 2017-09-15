@@ -10,7 +10,7 @@ readVect' = do
   if x == ""
     then pure $ (_ ** [])
     else do (_ ** xs) <- readVect'
-            pure $ (_ ** x :: xs)
+            pure (_ ** x :: xs)
 
 readVect : IO (len ** Vect len String)
 readVect = do
