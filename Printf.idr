@@ -24,12 +24,19 @@ printfFmt End acc = acc
 
 parseFormatString : FormatString -> Format
 parseFormatString fs = parseFormatString' $ unpack fs
-  where parseFormatString' : List Char -> Format
-        parseFormatString' [] = End
-        parseFormatString' ('%' :: 'd' :: xs) = Number $ parseFormatString' xs
-        parseFormatString' ('%' :: 's' :: xs) = Str $ parseFormatString' xs
-        parseFormatString' ('%' :: xs) = Literal "%" $ parseFormatString' xs
-        parseFormatString' (x :: xs) = Literal (cast x) $ parseFormatString' xs
+  where
+    parseFormatString' : List Char -> Format
+    parseFormatString' [] = End
+    parseFormatString' ('%' :: 'd' :: xs) = Number $ parseFormatString' xs
+    parseFormatString' ('%' :: 's' :: xs) = Str $ parseFormatString' xs
+    parseFormatString' ('%' :: '%' :: xs) = Literal "%" $ parseFormatString' xs
+    parseFormatString' ('%' :: x :: xs) =
+      -- [FIXME]: How on earth can I produce a compile error here?
+      idris_crash $ "Undefined format spec "
+        ++ (strCons '%' $ strCons x "")
+    parseFormatString' (x :: xs) = case parseFormatString' xs of
+                                     Literal p fmt => Literal (strCons x p) fmt
+                                     fmt => Literal (strCons x "") fmt
 
 printf : (fs : FormatString) -> PrintfType $ parseFormatString fs
 printf fs = printfFmt (parseFormatString fs) ""
