@@ -33,6 +33,7 @@ addToStore (MkData schema size items) newitem
 
 
 data Command : Schema -> Type where
+  SetSchema : (newschema : Schema) -> Command schema
   Add : SchemaType schema -> Command schema
   Get : Integer -> Command schema
   Invalid : String -> Command schema
@@ -40,14 +41,29 @@ data Command : Schema -> Type where
   Search : String -> Command schema
   Quit : Command schema
 
+mutual
+  parseSchema' : List String -> Schema -> Maybe Schema
+  parseSchema' xs schema
+    = case xs of
+        [] => Just schema
+        _ => case parseSchema xs of
+               Nothing => Nothing
+               Just xsSchema => Just (schema .+. xsSchema)
+
+  parseSchema : List String -> Maybe Schema
+  parseSchema ("String" :: xs) = parseSchema' xs SString
+  parseSchema ("Int" :: xs) = parseSchema' xs SInt
+  parseSchema _ = Nothing
+
 total
 parsePrefix : (schema : Schema) -> String -> Maybe (SchemaType schema, String)
 parsePrefix SString arg = getQuoted (unpack arg)
-  where getQuoted : List Char -> Maybe (String, String)
-        getQuoted ('"' :: xs) = case span (/= '"') xs of
-                                  (quoted, rest) => Just (pack quoted, ltrim $ pack rest)
-                                  _ => Nothing
-        getQuoted _ = Nothing
+  where
+    getQuoted : List Char -> Maybe (String, String)
+    getQuoted ('"' :: xs) = case span (/= '"') xs of
+                              (quoted, '"' :: rest) => Just (pack quoted, ltrim $ pack rest)
+                              _ => Nothing
+    getQuoted _ = Nothing
 parsePrefix SInt arg = case span isDigit arg of
                          ("", rest) => Nothing
                          (digit, rest) => Just (cast digit, ltrim rest)
@@ -66,6 +82,9 @@ parseArgBySchema schema arg = case parsePrefix schema arg of
                                 Nothing => Left $ "Cannot parse '" ++ arg ++ "'"
 
 parseCommand : (schema : Schema) -> String -> String -> Command schema
+parseCommand _ "schema" arg = case parseSchema $ words arg of
+                                Nothing => Invalid $ "Invalid schema spec: " ++ arg
+                                Just schema => SetSchema schema
 parseCommand schema "add" arg = case parseArgBySchema schema arg of
                                   Left err => Invalid $ "Invalid arg to add: " ++ err
                                   Right arg' => Add arg'
@@ -75,7 +94,7 @@ parseCommand _"get" arg = if all isDigit $ unpack arg
 parseCommand _ "quit" arg = Quit
 parseCommand _ "size" arg = Size
 parseCommand _ "search" arg = Search arg
-parseCommand _ cmd arg = Invalid $ cmd ++ " kenne ich nicht"
+parseCommand _ cmd arg = Invalid $ "Unknown command '" ++ cmd ++ "'"
 
 total
 parseInput : (schema : Schema) -> String -> Command schema
@@ -90,24 +109,37 @@ showItem {schema = SString} item = item
 showItem {schema = SInt} item = show item
 showItem {schema = (x .+. y)} (i1, i2) = showItem i1 ++ ", " ++ showItem i2
 
+total
+setSchema : (ds : DataStore) -> Schema -> Maybe DataStore
+setSchema ds schema = case size ds of
+                        Z => Just $ MkData schema _ []
+                        S k => Nothing
+
+total
 processInput : DataStore -> String -> Maybe (String, DataStore)
 processInput ds i
   = case parseInput (schema ds) i of
+      (SetSchema newSchema)
+        => case setSchema ds newSchema of
+             Nothing => Just ("Can't update schema!\n", ds)
+             Just newDs => Just ("Schema updated\n", newDs)
       (Add s) => Just ("ID: " ++ show (size ds) ++ "\n", addToStore ds s)
-      (Get i) => case integerToFin i (size ds) of
-                   Nothing  => Just ("Den Index gibt es nicht!\n", ds)
-                   Just idx => Just (showItem (index idx $ items ds) ++ "\n", ds)
+      (Get i)
+        => case integerToFin i (size ds) of
+             Nothing  => Just ("No such index!\n", ds)
+             Just idx => Just (showItem (index idx $ items ds) ++ "\n", ds)
       Quit => Nothing
       (Invalid msg) => Just (msg ++ "\n", ds)
       Size => Just ("No of items: " ++ show (size ds) ++ "\n", ds)
-      (Search infx) => Just (case map (\i => show (finToInteger i) ++ ": "
-                                               ++ showItem (index i (items ds))
-                                               ++ "\n")
-                                      (Data.Vect.findIndices (\el => isInfixOf infx (showItem el))
+      (Search infx)
+        => Just (case map (\i => show (finToInteger i) ++ ": "
+                                 ++ showItem (index i (items ds))
+                                 ++ "\n")
+                          (Data.Vect.findIndices (\el => isInfixOf infx (showItem el))
                                                              (items ds)) of
-                               [] => "No match.\n"
-                               items  => concat items
-                          , ds)
+                   [] => "No match.\n"
+                   items  => concat items
+               , ds)
 
 main : IO ()
 main = do replWith (MkData SString _ []) "Command: " processInput
