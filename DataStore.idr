@@ -39,6 +39,7 @@ data Command : Schema -> Type where
   SetSchema : (newschema : Schema) -> Command schema
   Add : SchemaType schema -> Command schema
   Get : Integer -> Command schema
+  List : Command schema
   Invalid : String -> Command schema
   Size : Command schema
   Search : String -> Command schema
@@ -91,9 +92,11 @@ parseCommand _ "schema" arg = case parseSchema $ words arg of
 parseCommand schema "add" arg = case parseArgBySchema schema arg of
                                   Left err => Invalid $ "Invalid arg to add: " ++ err
                                   Right arg' => Add arg'
-parseCommand _"get" arg = if all isDigit $ unpack arg
-                            then Get (cast arg)
-                            else Invalid $ "Invalid arg to get: " ++ arg
+parseCommand _"get" arg = if all isSpace $ unpack arg
+                            then List
+                            else if all isDigit $ unpack arg
+                                   then Get (cast arg)
+                                   else Invalid $ "Invalid arg to get: " ++ arg
 parseCommand _ "quit" arg = Quit
 parseCommand _ "size" arg = Size
 parseCommand _ "search" arg = Search arg
@@ -135,6 +138,7 @@ processInput ds i
       Quit => Nothing
       (Invalid msg) => Just (msg ++ "\n", ds)
       Size => Just ("No of items: " ++ show (size ds) ++ "\n", ds)
+      List => Just (unlines $ map showItem (toList $ items ds), ds)
       (Search infx)
         => Just (case map (\i => show (finToInteger i) ++ ": "
                                  ++ showItem (index i (items ds))
