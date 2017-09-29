@@ -46,9 +46,8 @@ mutual
   parseSchema' xs schema
     = case xs of
         [] => Just schema
-        _ => case parseSchema xs of
-               Nothing => Nothing
-               Just xsSchema => Just (schema .+. xsSchema)
+        _ => do xsSchema <- parseSchema xs
+                Just (schema .+. xsSchema)
 
   parseSchema : List String -> Maybe Schema
   parseSchema ("String" :: xs) = parseSchema' xs SString
@@ -67,12 +66,9 @@ parsePrefix SString arg = getQuoted (unpack arg)
 parsePrefix SInt arg = case span isDigit arg of
                          ("", rest) => Nothing
                          (digit, rest) => Just (cast digit, ltrim rest)
-parsePrefix (s1 .+. s2) arg = case parsePrefix s1 arg of
-                                Nothing => Nothing
-                                Just (v1, r) => case parsePrefix s2 r of
-                                                  Nothing => Nothing
-                                                  Just (v2, r) => Just ((v1, v2), r)
-
+parsePrefix (s1 .+. s2) arg = do (v1, r) <- parsePrefix s1 arg
+                                 (v2, r) <- parsePrefix s2 r
+                                 Just ((v1, v2), r)
 
 total
 parseArgBySchema : (schema : Schema) -> (arg : String) -> Either String (SchemaType schema)
