@@ -6,13 +6,16 @@ infixr 5 .+.
 
 data Schema = SString
             | SInt
+            | SChar
             | (.+.) Schema Schema
 
 %name Schema s, s1, s2
 
+total
 SchemaType : Schema -> Type
 SchemaType SString = String
 SchemaType SInt = Int
+SchemaType SChar = Char
 SchemaType (s1 .+. s2) = (SchemaType s1, SchemaType s2)
 
 
@@ -52,6 +55,7 @@ mutual
   parseSchema : List String -> Maybe Schema
   parseSchema ("String" :: xs) = parseSchema' xs SString
   parseSchema ("Int" :: xs) = parseSchema' xs SInt
+  parseSchema ("Char" :: xs) = parseSchema' xs SChar
   parseSchema _ = Nothing
 
 total
@@ -66,6 +70,9 @@ parsePrefix SString arg = getQuoted (unpack arg)
 parsePrefix SInt arg = case span isDigit arg of
                          ("", rest) => Nothing
                          (digit, rest) => Just (cast digit, ltrim rest)
+parsePrefix SChar arg = case span (/= ' ') $ unpack arg of
+                          ([c], ' ' :: rest) => Just (c, pack rest)
+                          _ => Nothing
 parsePrefix (s1 .+. s2) arg = do (v1, r) <- parsePrefix s1 arg
                                  (v2, r) <- parsePrefix s2 r
                                  Just ((v1, v2), r)
@@ -103,6 +110,7 @@ total
 showItem : SchemaType schema -> String
 showItem {schema = SString} item = item
 showItem {schema = SInt} item = show item
+showItem {schema = SChar} item = show item
 showItem {schema = (x .+. y)} (i1, i2) = showItem i1 ++ ", " ++ showItem i2
 
 total
